@@ -20,36 +20,31 @@ import android.app.LoaderManager.LoaderCallbacks;
 import android.content.Context;
 import android.content.Intent;
 import android.content.Loader;
+import android.content.SharedPreferences;
 import android.media.MediaPlayer;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Adapter;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
 
-public class EarthquakeActivity extends AppCompatActivity implements LoaderCallbacks<List<EarthQuake>> {
+public class EarthquakeActivity extends AppCompatActivity implements LoaderCallbacks<List<EarthQuake>>, SharedPreferences.OnSharedPreferenceChangeListener {
 
-    private final static String US_GS_QUAKE = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake&orderby=time&minmag=6&limit=10";
+    private final static String US_GS_QUAKE =  "http://earthquake.usgs.gov/fdsnws/event/1/query";
     private static final String LOG_TAG = EarthquakeActivity.class.getName();
     private EarthQuakeAdapter mAdapter;
     private  static final int EARTH_QUAKE_LOADER_ID = 1;
@@ -73,6 +68,9 @@ public class EarthquakeActivity extends AppCompatActivity implements LoaderCallb
         // Set the adapter on the {@link ListView}
         // so the list can be populated in the user interface
         earthquakeListView.setAdapter(mAdapter);
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        prefs.registerOnSharedPreferenceChangeListener(this);
 
 
         earthquakeListView.setOnItemClickListener(new AdapterView.OnItemClickListener(){
@@ -103,8 +101,42 @@ public class EarthquakeActivity extends AppCompatActivity implements LoaderCallb
     }
 
     @Override
+    public void onSharedPreferenceChanged(SharedPreferences prefs, String Key) {
+
+        if (Key.equals(getString(R.string.settings_min_magnitude_key)) ||
+                Key.equals(getString(R.string.settings_order_by_key))){
+            mAdapter.clear();
+
+            mEmptyStateTextView.setVisibility(View.GONE);
+
+            View loadingIndicator = findViewById(R.id.loading_indicator);
+            loadingIndicator.setVisibility(View.VISIBLE);
+            getLoaderManager().restartLoader(EARTH_QUAKE_LOADER_ID, null,this);
+        }
+
+    }
+
+    @Override
     public Loader<List<EarthQuake>> onCreateLoader(int i, Bundle bundle){
-        return new EarthquakeLoader(this, US_GS_QUAKE);
+
+        SharedPreferences shareprefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String minMagnitude = shareprefs.getString(
+                getString(R.string.settings_min_magnitude_key),
+                getString(R.string.settings_min_magnitude_by_default));
+
+        String orderBy = shareprefs.getString(
+                getString(R.string.settings_order_by_key),
+                getString(R.string.settings_order_by_default));
+
+        Uri baseUri = Uri.parse(US_GS_QUAKE);
+        Uri.Builder uriBuilder = baseUri.buildUpon();
+
+        uriBuilder.appendQueryParameter("format", "geojson");
+        uriBuilder.appendQueryParameter("limit", "10");
+        uriBuilder.appendQueryParameter("minmag", minMagnitude);
+        uriBuilder.appendQueryParameter("orderby", orderBy);
+
+        return new EarthquakeLoader(this, uriBuilder.toString());
     }
 
     @Override
@@ -124,4 +156,21 @@ public class EarthquakeActivity extends AppCompatActivity implements LoaderCallb
         mAdapter.clear();
     }
 
+
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu){
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item){
+        int id = item.getItemId();
+        if (id == R.id.action_settings){
+            Intent settingsIntent = new Intent(this, SettingsActivity.class);
+            startActivity(settingsIntent);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
 }
